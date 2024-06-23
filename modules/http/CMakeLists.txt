@@ -87,8 +87,9 @@ install(
 
 # install header file
 install(
-    FILES ${TBOX_HTTP_HEADERS}
+    DIRECTORY .
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/tbox/http
+    FILES_MATCHING PATTERN "*.h"
 )
 
 
