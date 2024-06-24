@@ -97,12 +97,14 @@ install(
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-# install header file
-install(
-    FILES ${TBOX_NETWORK_HEADERS}
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/tbox/network
-)
+# get the current directory name
+get_filename_component(CURRENT_DIR_NAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
 
+# install header files with directory structure
+foreach(header IN LISTS TBOX_NETWORK_HEADERS)
+    get_filename_component(dir ${header} DIRECTORY)
+    install(FILES ${header} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/tbox/${CURRENT_DIR_NAME}/${dir})
+endforeach()
 
 # generate and install export file
 install(
