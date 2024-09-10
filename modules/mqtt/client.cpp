@@ -51,6 +51,7 @@ struct Client::Data {
     State state = State::kNone;
 
     int cb_level = 0;   //! 回调层级
+    int reconnect_wait_remain_sec = 0;  //! 重连等待剩余时长
 
     std::thread *sp_thread = nullptr;
 
@@ -187,7 +188,7 @@ bool Client::initialize(const Config &config, const Callbacks &callbacks)
     d_->config = config;
     d_->callbacks = callbacks;
 
-    d_->state = State::kInited;
+    updateStateTo(State::kInited);
     return true;
 }
 
@@ -200,13 +201,14 @@ void Client::cleanup()
 
     d_->config = Config();
     d_->callbacks = Callbacks();
-    d_->state = State::kNone;
+    updateStateTo(State::kNone);
 }
 
 bool Client::start()
 {
-    if (d_->state != State::kInited) {
-        LogWarn("state != kInited");
+    if (d_->state != State::kInited &&
+        d_->state != State::kEnd) {
+        LogWarn("state is not kInited or kEnd");
         return false;
     }
 
@@ -283,7 +285,7 @@ bool Client::start()
     if (username != nullptr)
         mosquitto_username_pw_set(d_->sp_mosq, username, passwd);
 
-    d_->state = State::kConnecting;
+    updateStateTo(State::kConnecting);
 
     CHECK_DELETE_RESET_OBJ(d_->sp_thread);
     auto is_alive = d_->alive_tag.get();  //! 原理见Q1
@@ -298,9 +300,14 @@ bool Client::start()
                                               d_->config.base.keepalive);
             d_->wp_loop->runInLoop(
                 [this, is_alive, ret] {
-                    if (!is_alive)  //!< 判定this指针是否有效
+                    RECORD_SCOPE();
+                    if (!is_alive) { //!< 判定this指针是否有效
+                        LogWarn("object not alive");
                         return;
-                    onTcpConnectDone(ret, true);
+                    }
+
+                    onTcpConnectDone(ret);
+                    enableTimer();
                 },
                 "mqtt::Client::start, connect done"
             );
@@ -312,7 +319,8 @@ bool Client::start()
 
 void Client::stop()
 {
-    if (d_->state <= State::kInited)
+    if (d_->state <= State::kInited ||
+        d_->state == State::kEnd)
         return;
 
     RECORD_SCOPE();
@@ -330,7 +338,7 @@ void Client::stop()
 
     disableTimer();
 
-    d_->state = State::kInited;
+    updateStateTo(State::kInited);
     return;
 }
 
@@ -399,15 +407,10 @@ void Client::onTimerTick()
         d_->state == State::kMqttConnected) {
         mosquitto_loop_misc(d_->sp_mosq);
 
-        if (mosquitto_socket(d_->sp_mosq) < 0) {
-            LogInfo("disconnected with broker, retry.");
-            d_->state = State::kConnecting;
-        } else {
+        if (mosquitto_socket(d_->sp_mosq) > 0)
             enableSocketWriteIfNeed();
-        }
-    }
 
-    if (d_->state == State::kConnecting) {
+    } else if (d_->state == State::kConnecting) {
         if (d_->sp_thread == nullptr) {
             auto is_alive = d_->alive_tag.get();  //! 原理见Q1
             d_->sp_thread = new thread(
@@ -416,15 +419,31 @@ void Client::onTimerTick()
                     int ret = mosquitto_reconnect_async(d_->sp_mosq);
                     d_->wp_loop->runInLoop(
                         [this, is_alive, ret] {
-                            if (!is_alive)  //!< 判定this指针是否有效
+                            RECORD_SCOPE();
+                            if (!is_alive) {  //!< 判定this指针是否有效
+                                LogWarn("object not alive");
                                 return;
-                            onTcpConnectDone(ret, false);
+                            }
+                            onTcpConnectDone(ret);
                         },
                         "mqtt::Client::onTimerTick, reconnect done"
                     );
                 }
             );
         }
+
+    } else if (d_->state == State::kReconnWaiting) {
+        auto &remain_sec = d_->reconnect_wait_remain_sec;
+        if (remain_sec > 0) {
+            --remain_sec;
+            if (remain_sec == 0) {
+                updateStateTo(State::kConnecting);
+                LogDbg("wait timeout, reconnect now");
+            }
+        }
+
+    } else if (d_->state == State::kEnd) {
+        disableTimer();
     }
 }
 
@@ -493,7 +512,7 @@ void Client::onConnected(int rc)
 
     RECORD_SCOPE();
     if (d_->state != State::kMqttConnected) {
-        d_->state = State::kMqttConnected;
+        updateStateTo(State::kMqttConnected);
         ++d_->cb_level;
         if (d_->callbacks.connected)
             d_->callbacks.connected();
@@ -504,21 +523,8 @@ void Client::onConnected(int rc)
 void Client::onDisconnected(int rc)
 {
     RECORD_SCOPE();
-    disableSocketRead();
-    disableSocketWrite();
-
-    LogInfo("disconnected");
-
-    if (d_->state >= State::kTcpConnected) {
-        if (d_->state == State::kMqttConnected) {
-            ++d_->cb_level;
-            if (d_->callbacks.disconnected)
-                d_->callbacks.disconnected();
-            --d_->cb_level;
-        }
-        d_->state = State::kConnecting;
-    }
-    (void)rc;
+    LogNotice("disconnected, rc:%d", rc);
+    handleDisconnectEvent();
 }
 
 void Client::onPublish(int mid)
@@ -591,26 +597,32 @@ void Client::onLog(int level, const char *str)
     LogPrintfFunc("mosq", nullptr, nullptr, 0, new_level, 0, str);
 }
 
-void Client::onTcpConnectDone(int ret, bool first_connect)
+void Client::onTcpConnectDone(int ret)
 {
-    if (d_->sp_thread == nullptr)
-        return;
-
     RECORD_SCOPE();
+    if (d_->sp_thread == nullptr) {
+        LogWarn("sp_thread == nullptr");
+        return;
+    }
+
     d_->sp_thread->join();
     CHECK_DELETE_RESET_OBJ(d_->sp_thread);
 
     if (ret == MOSQ_ERR_SUCCESS) {
+        LogDbg("connect success");
         enableSocketRead();
         enableSocketWriteIfNeed();
-        d_->state = State::kTcpConnected;
-    } else {
-        LogWarn("connect fail, ret:%d", ret);
-    }
+        updateStateTo(State::kTcpConnected);
 
-    //! 如果是首次连接要启动定时器，重连的不需要
-    if (first_connect)
-        enableTimer();
+    } else {
+        LogNotice("connect fail, rc:%d", ret);
+        tryReconnect();
+
+        ++d_->cb_level;
+        if (d_->callbacks.connect_fail)
+            d_->callbacks.connect_fail();
+        --d_->cb_level;
+    }
 }
 
 void Client::enableSocketRead()
@@ -661,6 +673,62 @@ void Client::disableSocketWrite()
 void Client::disableTimer()
 {
     d_->sp_timer_ev->disable();
+}
+
+void Client::tryReconnect()
+{
+    //! 如果开启了自动重连
+    if (d_->config.auto_reconnect_enable) {
+        if (d_->config.auto_reconnect_wait_sec > 0) {
+            LogDbg("reconnect after %d sec", d_->config.auto_reconnect_wait_sec);
+            d_->reconnect_wait_remain_sec = d_->config.auto_reconnect_wait_sec;
+            updateStateTo(State::kReconnWaiting);
+
+        } else {
+            LogDbg("reconnect now");
+            d_->reconnect_wait_remain_sec = 0;
+            updateStateTo(State::kConnecting);
+        }
+
+    } else {  //! 如果不需要自动重连
+        LogDbg("no need reconnect, end");
+        updateStateTo(State::kEnd);
+    }
+}
+
+void Client::handleDisconnectEvent()
+{
+    disableSocketRead();
+    disableSocketWrite();
+
+    if (d_->state == State::kTcpConnected ||
+        d_->state == State::kMqttConnected) {
+        auto is_mqtt_disconnected = d_->state == State::kMqttConnected;
+        //! 一定要先判定，因为 tryReconnect() 会改 d_->state
+
+        tryReconnect();
+
+        ++d_->cb_level;
+        if (is_mqtt_disconnected) {
+            if (d_->callbacks.disconnected)
+                d_->callbacks.disconnected();
+        } else {
+            if (d_->callbacks.connect_fail)
+                d_->callbacks.connect_fail();
+        }
+        --d_->cb_level;
+    }
+}
+
+void Client::updateStateTo(State new_state)
+{
+    d_->state = new_state;
+    LogDbg("new_state: %d", d_->state);
+
+    ++d_->cb_level;
+    if (d_->callbacks.state_changed)
+        d_->callbacks.state_changed(new_state);
+    --d_->cb_level;
 }
 
 }

@@ -27,6 +27,9 @@
 namespace tbox {
 namespace alarm {
 
+constexpr auto kSecondsOfDay = 60 * 60 * 24;
+constexpr auto kSecondsOfWeek = kSecondsOfDay * 7;
+
 /**
  * 定时器基类
  */
@@ -71,16 +74,17 @@ class Alarm
 
   protected:
     /**
-     * \brief 计算下一个定时触发时间距当前的秒数
+     * \brief 计算下一个定时触发时间点的秒数
      *
-     * \param curr_local_ts   当前时区的时间戳，单位：秒
+     * \param curr_local_ts   当前时区的现在的时间戳，单位：秒
+     * \param next_local_ts   当前时区的下一轮的时间戳，单位：秒
      *
-     * \return  >=0， 下一个定时触发时间距当前的秒数
-     *          -1，  没有找到下一个定时的触发时间点
+     * \return true   已找到
+     *         false  未找到
      *
      * \note  该函数为虚函数，需要由子类对实现。具体不同类型的定时器有不同的算法
      */
-    virtual int calculateWaitSeconds(uint32_t curr_local_ts) = 0;
+    virtual bool calculateNextLocalTimeSec(uint32_t curr_local_sec, uint32_t &next_local_sec) = 0;
 
     //! 定时到期动作
     virtual void onTimeExpired();
@@ -90,6 +94,9 @@ class Alarm
 
     virtual bool onEnable() { return true; }
     virtual bool onDisable() { return true; }
+
+    static bool GetCurrentUtcTime(uint32_t &utc_sec);
+    static bool GetCurrentUtcTime(uint32_t &utc_sec, uint32_t &utc_usec);
 
   protected:
     event::Loop *wp_loop_;
@@ -109,7 +116,7 @@ class Alarm
     };
     State state_ = State::kNone;  //!< 当前状态
 
-    uint32_t target_utc_ts_ = 0;
+    uint32_t target_utc_sec_ = 0;
 };
 
 }

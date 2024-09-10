@@ -22,8 +22,8 @@
 
 #include "sink.h"
 
-#include <vector>
 #include <tbox/util/async_pipe.h>
+#include <tbox/util/buffer.h>
 
 namespace tbox {
 namespace log {
@@ -41,7 +41,7 @@ class AsyncSink : public Sink {
 
     virtual void onLogFrontEnd(const LogContent *content) override;
     void onLogBackEndReadPipe(const void *data_ptr, size_t data_size);
-    void onLogBackEnd(const LogContent *content);
+    void onLogBackEnd(const LogContent &content);
     virtual void appendLog(const char *str, size_t len) = 0;
     virtual void flushLog() { }
 
@@ -50,7 +50,7 @@ class AsyncSink : public Sink {
     util::AsyncPipe async_pipe_;
     bool is_pipe_inited_ = false;
 
-    std::vector<char> buffer_;
+    util::Buffer buffer_;
 };
 
 }
