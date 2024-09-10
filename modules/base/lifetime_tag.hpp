@@ -20,6 +20,8 @@
 #ifndef TBOX_LIFETIME_TAG_H_20221215
 #define TBOX_LIFETIME_TAG_H_20221215
 
+#include <atomic>
+
 namespace tbox {
 
 /**
@@ -125,10 +127,13 @@ class LifetimeTag {
 
  public:
   ~LifetimeTag() {
-    if (d_->watcher_counter == 0)
+    if (d_->watcher_counter == 0) {
+        std::atomic_thread_fence(std::memory_order_seq_cst);
       delete d_;
-    else
+    }else {
+      std::atomic_thread_fence(std::memory_order_seq_cst);
       d_->alive = false;
+    }
   }
 
   inline LifetimeTag() : d_(new Detail) { }

@@ -19,6 +19,7 @@
  */
 #include "timestamp.h"
 #include <sys/time.h>
+#include <ctime>
 
 namespace tbox {
 namespace util {
