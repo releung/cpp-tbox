@@ -26,30 +26,27 @@ namespace tbox {
 namespace flow {
 
 /**
- * bool IfElseAction(if_action, succ_action, fail_acton) {
+ * bool IfElseAction(if_action, then_action, else_action) {
  *   if (if_action())
- *     return succ_action();
+ *     return then_action();
  *   else
- *     return fail_acton();
+ *     return else_action();
  * }
  */
-class IfElseAction : public AssembleAction {
+class IfElseAction : public SerialAssembleAction {
   public:
     explicit IfElseAction(event::Loop &loop);
     virtual ~IfElseAction();
 
     virtual void toJson(Json &js) const override;
 
-    //! role: "if", "succ", "fail"
+    //! role: "if", "succ/then", "fail/else"
     virtual bool setChildAs(Action *child, const std::string &role) override;
 
     virtual bool isReady() const override;
 
   protected:
     virtual void onStart() override;
-    virtual void onStop() override;
-    virtual void onPause() override;
-    virtual void onResume() override;
     virtual void onReset() override;
 
   protected:
@@ -57,8 +54,8 @@ class IfElseAction : public AssembleAction {
 
   private:
     Action *if_action_   = nullptr;
-    Action *succ_action_ = nullptr;
-    Action *fail_action_ = nullptr;
+    Action *then_action_ = nullptr;
+    Action *else_action_ = nullptr;
 };
 
 }

@@ -21,6 +21,7 @@
 
 #include <iomanip>
 #include <sstream>
+#include <algorithm>
 
 namespace tbox {
 namespace util {
@@ -237,6 +238,9 @@ size_t HexStrToRawData(const std::string &hex_str, std::vector<uint8_t> &out, co
 void Replace(std::string &target_str, const std::string &pattern_str, const std::string &replace_str,
              std::string::size_type start, std::string::size_type count)
 {
+    if (target_str.empty() || start > target_str.size())
+        return;
+
     if (count == 0)
         count = UINT32_MAX;
 
@@ -249,6 +253,40 @@ void Replace(std::string &target_str, const std::string &pattern_str, const std:
         pos += replace_str_len;
         --count;
     }
+}
+
+std::string ToUpper(const std::string &origin_str)
+{
+  std::string target_str;
+  target_str.reserve(origin_str.size());
+  std::back_insert_iterator<std::string>  back_insert_iter(target_str);
+  std::transform(origin_str.begin(), origin_str.end(), back_insert_iter, ::toupper);
+  return target_str;
+}
+
+std::string ToLower(const std::string &origin_str)
+{
+  std::string target_str;
+  target_str.reserve(origin_str.size());
+  std::back_insert_iterator<std::string>  back_insert_iter(target_str);
+  std::transform(origin_str.begin(), origin_str.end(), back_insert_iter, ::tolower);
+  return target_str;
+}
+
+bool IsStartWith(const std::string &origin_str, const std::string &text)
+{
+    if (origin_str.length() < text.length())
+        return false;
+
+    return origin_str.find(text) == 0;
+}
+
+bool IsEndWith(const std::string &origin_str, const std::string &text)
+{
+    if (origin_str.length() < text.length())
+        return false;
+
+    return origin_str.find(text, (origin_str.length() - text.length())) != std::string::npos;
 }
 
 }

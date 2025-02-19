@@ -26,10 +26,12 @@ LIB_VERSION_X = 1
 LIB_VERSION_Y = 0
 LIB_VERSION_Z = 1
 
+HAVE_EXECINFO_H ?= yes
+
 HEAD_FILES = \
 	version.h \
 	log.h \
-	log_imp.h \
+	log_impl.h \
 	log_output.h \
 	defines.h \
 	scope_exit.hpp \
@@ -49,7 +51,7 @@ HEAD_FILES = \
 
 CPP_SRC_FILES = \
 	version.cpp \
-	log_imp.cpp \
+	log_impl.cpp \
 	log_output.cpp \
 	backtrace.cpp \
 	catch_throw.cpp \
@@ -58,7 +60,11 @@ CPP_SRC_FILES = \
 pre_build:
 	touch version.cpp
 
-CXXFLAGS := -DMODULE_ID='"tbox.base"' $(CXXFLAGS)
+CXXFLAGS += -DMODULE_ID='"tbox.base"'
+
+ifeq ($(HAVE_EXECINFO_H),yes)
+CXXFLAGS += -DHAVE_EXECINFO_H=1
+endif
 
 TEST_CPP_SRC_FILES = \
 	$(CPP_SRC_FILES) \

@@ -228,7 +228,6 @@ void BufferedFd::onReadCallback(short)
         }
 
     } else if (rsize == 0) {    //! 读到0字节数据，说明fd_已不可读了
-        sp_read_event_->disable();
         if (read_zero_cb_) {
             ++cb_level_;
             read_zero_cb_();
@@ -236,9 +235,9 @@ void BufferedFd::onReadCallback(short)
         }
     } else {    //! 读出错了
         if (errno != EAGAIN) {
-            if (error_cb_) {
+            if (read_error_cb_) {
                 ++cb_level_;
-                error_cb_(errno);
+                read_error_cb_(errno);
                 --cb_level_;
             } else
                 LogWarn("read error, rsize:%d, errno:%d, %s", rsize, errno, strerror(errno));
@@ -266,9 +265,9 @@ void BufferedFd::onWriteCallback(short)
     if (wsize >= 0) {
         send_buff_.hasRead(wsize);
     } else {
-        if (error_cb_) {
+        if (write_error_cb_) {
             ++cb_level_;
-            error_cb_(errno);
+            write_error_cb_(errno);
             --cb_level_;
         } else
             LogWarn("write error, wsize:%d, errno:%d, %s", wsize, errno, strerror(errno));

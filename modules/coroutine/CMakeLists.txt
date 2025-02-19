@@ -70,14 +70,11 @@ install(
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-# get the current directory name
-get_filename_component(CURRENT_DIR_NAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
-
-# install header files with directory structure
-foreach(header IN LISTS TBOX_COROUTINE_HEADERS)
-    get_filename_component(dir ${header} DIRECTORY)
-    install(FILES ${header} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/tbox/${CURRENT_DIR_NAME}/${dir})
-endforeach()
+# install header file
+install(
+    FILES ${TBOX_COROUTINE_HEADERS}
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/tbox/coroutine
+)
 
 # generate and install export file
 install(

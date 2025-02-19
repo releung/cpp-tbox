@@ -34,7 +34,7 @@ TcpConnection::TcpConnection(event::Loop *wp_loop, SocketFd fd, const SockAddr &
 {
     sp_buffered_fd_->initialize(fd);
     sp_buffered_fd_->setReadZeroCallback(std::bind(&TcpConnection::onSocketClosed, this));
-    sp_buffered_fd_->setErrorCallback(std::bind(&TcpConnection::onError, this, _1));
+    sp_buffered_fd_->setReadErrorCallback(std::bind(&TcpConnection::onReadError, this, _1));
 
     sp_buffered_fd_->enable();
 }
@@ -129,9 +129,18 @@ bool TcpConnection::send(const void *data_ptr, size_t data_size)
     return false;
 }
 
+Buffer* TcpConnection::getReceiveBuffer()
+{
+    if (sp_buffered_fd_ != nullptr)
+        return sp_buffered_fd_->getReceiveBuffer();
+    return nullptr;
+}
+
 void TcpConnection::onSocketClosed()
 {
     LogInfo("%s", peer_addr_.toString().c_str());
+
+    sp_buffered_fd_->disable();
 
     BufferedFd *tmp = nullptr;
     std::swap(tmp, sp_buffered_fd_);
@@ -148,7 +157,7 @@ void TcpConnection::onSocketClosed()
     }
 }
 
-void TcpConnection::onError(int errnum)
+void TcpConnection::onReadError(int errnum)
 {
     LogNotice("errno:%d, %s", errnum, strerror(errnum));
     onSocketClosed();

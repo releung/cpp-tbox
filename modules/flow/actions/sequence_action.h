@@ -39,7 +39,7 @@ namespace flow {
  *   return true;
  * }
  */
-class SequenceAction : public AssembleAction {
+class SequenceAction : public SerialAssembleAction {
   public:
     //! 模式
     enum class Mode {
@@ -59,11 +59,10 @@ class SequenceAction : public AssembleAction {
     inline void setMode(Mode mode) { mode_ = mode; }
     inline int index() const { return index_; }
 
+    static std::string ToString(Mode mode);
+
   protected:
     virtual void onStart() override;
-    virtual void onStop() override;
-    virtual void onPause() override;
-    virtual void onResume() override;
     virtual void onReset() override;
 
   private:

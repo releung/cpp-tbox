@@ -35,6 +35,7 @@
 #include <tbox/terminal/helper.h>
 
 #include "main.h"
+#include "module.h"
 
 namespace tbox {
 namespace main {
@@ -77,7 +78,7 @@ ContextImp::ContextImp() :
     sp_thread_pool_(new eventx::ThreadPool(sp_loop_)),
     sp_timer_pool_(new eventx::TimerPool(sp_loop_)),
     sp_async_(new eventx::Async(sp_thread_pool_)),
-    sp_terminal_(new terminal::Terminal),
+    sp_terminal_(new terminal::Terminal(sp_loop_)),
     sp_telnetd_(new terminal::Telnetd(sp_loop_, sp_terminal_)),
     sp_tcp_rpc_(new terminal::TcpRpc(sp_loop_, sp_terminal_)),
     sp_coroutine_(new coroutine::Scheduler(sp_loop_)),
@@ -110,8 +111,11 @@ void ContextImp::fillDefaultConfig(Json &cfg) const
     cfg["thread_pool"] = R"({"min":0, "max":1})"_json;
 }
 
-bool ContextImp::initialize(const char* proc_name, const Json &cfg)
+bool ContextImp::initialize(const char* proc_name, const Json &cfg, Module *module)
 {
+    TBOX_ASSERT(module != nullptr);
+    module_ = module;
+
     if (util::json::HasObjectField(cfg, "loop")) {
         auto &js_loop = cfg["loop"];
         initLoop(js_loop);
@@ -468,6 +472,23 @@ void ContextImp::initShell()
             , "Print app describe");
             wp_nodes->mountNode(info_node, func_node, "what");
         }
+    }
+
+    {
+        auto apps_node = wp_nodes->createDirNode("Applications directory");
+        wp_nodes->mountNode(wp_nodes->rootNode(), apps_node, "apps");
+
+        auto func_node = wp_nodes->createFuncNode(
+            [this] (const Session &s, const Args &) {
+                Json js;
+                module_->toJson(js);
+                auto json_str = js.dump(2);
+                util::string::Replace(json_str, "\n", "\r\n");
+                s.send(json_str);
+                s.send("\r\n");
+            }
+            , "Dump apps as JSON");
+        wp_nodes->mountNode(apps_node, func_node, "dump");
     }
 }
 

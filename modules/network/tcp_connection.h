@@ -63,10 +63,11 @@ class TcpConnection : public ByteStream {
     virtual void bind(ByteStream *receiver) override;
     virtual void unbind() override;
     virtual bool send(const void *data_ptr, size_t data_size) override;
+    virtual Buffer* getReceiveBuffer() override;
 
   protected:
     void onSocketClosed();
-    void onError(int errnum);
+    void onReadError(int errnum);
 
   private:
     explicit TcpConnection(event::Loop *wp_loop, SocketFd fd, const SockAddr &peer_addr);

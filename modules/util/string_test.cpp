@@ -273,3 +273,26 @@ TEST(string, Replace) {
         EXPECT_STREQ(t.c_str(), "aa bbaa aab aaaa aab");
     }
 }
+
+TEST(string, ToUpper) {
+  EXPECT_EQ(ToUpper("Abc:?x#Y$z "), "ABC:?X#Y$Z ");
+  EXPECT_EQ(ToUpper(""), "");
+}
+
+TEST(string, ToLower) {
+  EXPECT_EQ(ToLower("Abc:?x#Y$z "), "abc:?x#y$z ");
+  EXPECT_EQ(ToLower(""), "");
+}
+
+TEST(string, IsStartWith) {
+  EXPECT_TRUE(IsStartWith("abc.123", "abc"));
+  EXPECT_FALSE(IsStartWith("abc.123", "12"));
+  EXPECT_FALSE(IsStartWith("abc", "abcd"));
+}
+
+TEST(string, IsEndWith) {
+  EXPECT_TRUE(IsEndWith("abc.123", "123"));
+  EXPECT_FALSE(IsEndWith("abc.123", "bc"));
+  EXPECT_FALSE(IsEndWith("abc", "abcd"));
+}
+
